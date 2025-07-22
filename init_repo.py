@@ -10,7 +10,7 @@ Usage:
     python3 init_repo.py --test
     python3 init_repo.py --help
 
-Author: Billy
+Author: Your Name
 Date: 2025
 """
 
@@ -37,8 +37,8 @@ class RepoInitializer:
             config_path (str): Path to configuration file
         """
         self.config_path = config_path
+        self._setup_logging()  # Set up logging FIRST
         self.config = self._load_config()
-        self._setup_logging()
         
     def _setup_logging(self) -> None:
         """Configure logging for the application."""
@@ -63,8 +63,30 @@ class RepoInitializer:
             FileNotFoundError: If config file doesn't exist
             json.JSONDecodeError: If config file is invalid JSON
         """
+        # Try to find config file in multiple locations
+        possible_paths = [
+            self.config_path,  # Provided path or default "config.json"
+            os.path.join(os.path.dirname(__file__), self.config_path),  # Same dir as script
+            os.path.join(os.path.expanduser("~"), ".config", "init_repo", self.config_path),  # User config dir
+            os.path.join(os.path.expanduser("~"), self.config_path)  # Home directory
+        ]
+        
+        config_file_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                config_file_path = path
+                self.logger.info(f"Found config file at: {path}")
+                break
+                
+        if not config_file_path:
+            self.logger.error(f"Config file not found. Searched in:")
+            for path in possible_paths:
+                self.logger.error(f"  - {path}")
+            self._create_sample_config()
+            raise FileNotFoundError(f"Config file '{self.config_path}' not found")
+        
         try:
-            with open(self.config_path, 'r') as f:
+            with open(config_file_path, 'r') as f:
                 config = json.load(f)
                 
             # Validate required configuration keys
@@ -76,16 +98,16 @@ class RepoInitializer:
                 
             return config
             
-        except FileNotFoundError:
-            self.logger.error(f"Config file {self.config_path} not found")
-            self._create_sample_config()
-            raise
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON in config file: {e}")
             raise
             
     def _create_sample_config(self) -> None:
         """Create a sample configuration file."""
+        # Create config in the same directory as the script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, "config.json")
+        
         sample_config = {
             "github_token": "your_github_personal_access_token_here",
             "github_username": "YourGitHubUsername",
@@ -93,11 +115,15 @@ class RepoInitializer:
             "default_branch": "main"
         }
         
-        with open(self.config_path, 'w') as f:
-            json.dump(sample_config, f, indent=2)
-            
-        self.logger.info(f"Created sample config file: {self.config_path}")
-        self.logger.info("Please edit the config file with your actual values")
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(sample_config, f, indent=2)
+                
+            self.logger.info(f"Created sample config file: {config_path}")
+            self.logger.info("Please edit the config file with your actual values")
+        except Exception as e:
+            self.logger.error(f"Failed to create sample config: {e}")
+            print(f"Please create a config.json file manually with your settings")
         
     def _run_command(self, command: str, cwd: Optional[str] = None, 
                     check: bool = True) -> Tuple[bool, str, str]:
