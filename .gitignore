@@ -41,3 +41,4 @@ build/
 # Misc
 *.swp
 *~ 
+config.json
